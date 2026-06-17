@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HLPD Land Bank Map</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    /* 2. Custom CSS สำหรับตกแต่งหน้าเว็บ */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; }
+    #header {
+      background: #1a3a5c; color: white; padding: 14px 20px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    #header h1 { font-size: 18px; font-weight: 600; }
+    #header span { font-size: 13px; opacity: 0.7; margin-left: auto; }
+    #container { display: flex; height: calc(100vh - 52px); }
+    #sidebar { width: 280px; min-width: 280px; background: white; overflow-y: auto; border-right: 1px solid #dde3ea; }
+    .region-header { color: white; padding: 8px 14px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; position: sticky; top: 0; z-index: 1; }
+    .plot-item { padding: 10px 14px; border-bottom: 1px solid #eef0f3; cursor: pointer; transition: background 0.15s; }
+    .plot-item:hover { background: #eef4ff; }
+    .plot-item.active { background: #dbeafe; border-left: 3px solid #2563eb; }
+    .plot-name { font-size: 13px; font-weight: 600; color: #1e293b; }
+    .plot-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .plot-price { font-size: 11px; color: #0f766e; font-weight: 500; margin-top: 2px; }
+    #map { flex: 1; }
+    .legend { background: white; padding: 10px 14px; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.2); font-size: 12px; line-height: 1.8; }
+    .legend-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .popup-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+    .popup-row { font-size: 12px; color: #374151; line-height: 1.7; }
+    .popup-link { display: inline-block; margin-top: 6px; font-size: 12px; color: #2563eb; text-decoration: none; }
+    .popup-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🗺️ HYLIFE PROPERTY DEVELOPMENT — Land Bank</h1>
+  <span>23 แปลง | อัปเดต 23/03/2026</span>
+</div>
+
+<div id="container">
+  <div id="sidebar"></div>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// 4. ข้อมูลที่ดิน (Data Structure)
+const regions = {
+  "Bangkok": { 
+    color: "#dc2626", 
+    plots: [
+      { name: "Lasalle soi7", area: "1-2-76 ไร่", size: "2,704 ตร.ม.", buy: "65000000", sell: "98522142", lat: 13.664738, lng: 100.607021, gmaps: "https://maps.app.goo.gl/MWb4CDL7Bxr1DGY78" },
+      { name: "Sukhumvit 109", area: "1-1-20 ไร่", size: "2,080 ตร.ม.", buy: "60000000", sell: "83829007", lat: 13.654421, lng: 100.605398, gmaps: "https://maps.app.goo.gl/nb2yRo3AD46XYJxq9" }
+    ]
+  },
+  "Chiang Mai": { 
+    color: "#2563eb", 
+    plots: [
+      { name: "Thai Airway", area: "15-2-49.5 ไร่", size: "24,998 ตร.ม.", buy: "105000000", sell: "164788612", lat: 18.762040, lng: 98.969252, gmaps: "https://maps.app.goo.gl/jbXeacEiSGJS1FpH7" },
+      { name: "Nonghoi", area: "3-2-68.9 ไร่", size: "5,875.6 ตร.ม.", buy: "104147400", sell: "133303025", lat: 18.767277, lng: 99.006577, gmaps: "https://maps.app.goo.gl/G3m2njeD6yoDtLBdA" },
+      { name: "Chotana", area: "8-1-91 ไร่", size: "13,564 ตร.ม.", buy: "110000000", sell: "165247018", lat: 18.816835, lng: 98.983494, gmaps: "https://maps.app.goo.gl/oprQj5r8Quk5udZa9" },
+      { name: "Land Near BKK Hospital", area: "4-3-69.8 ไร่", size: "7,879.2 ตร.ม.", buy: "175000000", sell: "262413200", lat: 18.789390, lng: 99.025540, gmaps: "https://maps.app.goo.gl/9BaGKha6CMFUjq166" },
+      { name: "Suksawad", area: "94-3-14.3 ไร่", size: "151,657.2 ตร.ม.", buy: "325942000", sell: "461326370", lat: 18.677973, lng: 98.941923, gmaps: "https://maps.app.goo.gl/j5DjS7vkXYfRyMtu7" },
+      { name: "San Sai", area: "122-3-55.1 ไร่", size: "196,620.4 ตร.ม.", buy: "117400000", sell: "164052245", lat: 18.943290, lng: 99.016845, gmaps: "https://maps.app.goo.gl/3xyAVF9aL9qr98mP8" },
+      { name: "Chang Klan", area: "0-3-36 ไร่", size: "1,344 ตร.ม.", buy: "17000000", sell: "25087636", lat: 18.769801, lng: 98.999269, gmaps: "https://maps.app.goo.gl/vkS1MxaSKvdb4eXs6" },
+      { name: "Sheep Farm", area: "222-2-48.2 ไร่", size: "356,192.8 ตร.ม.", buy: "40533735", sell: "65707180", lat: 18.287582, lng: 98.677912, gmaps: "https://maps.app.goo.gl/ZSd7kGCpS9qnoEMp9" },
+      { name: "Huay sai, Mae Rim", area: "8-0-68 ไร่", size: "13,072 ตร.ม.", buy: "10500000", sell: "16408", lat: 18.959694, lng: 98.921341, gmaps: "https://maps.app.goo.gl/K3Pzzbtuk5LqUYhE7" },
+      { name: "Mi Ville", area: "38-3-12 ไร่", size: "62,048 ตร.ม.", buy: "105154498", sell: "162220218", lat: 18.697259, lng: 98.911720, gmaps: "https://maps.app.goo.gl/y6y771bZMhRugCA39" },
+      { name: "San Phak Wan", area: "22-1-59.5 ไร่", size: "35,838 ตร.ม.", buy: "94074750", sell: "145728671", lat: 18.717939, lng: 98.969311, gmaps: "https://maps.app.goo.gl/8UphWLx2CcWRXoGD8" },
+      { name: "Fah Ham", area: "0-2-43 ไร่", size: "972 ตร.ม.", buy: "14580000", sell: "20113956", lat: 18.805523, lng: 99.013770, gmaps: "https://maps.app.goo.gl/mvLB2sX77p4i2n3w8" },
+      { name: "San Sai 4 Rai", area: "4-0-0 ไร่", size: "6,400 ตร.ม.", buy: "94300000", sell: "122250096", lat: 18.811060, lng: 99.029349, gmaps: "https://maps.app.goo.gl/8N6YtagMQZZ5SByM9" }
+    ]
+  },
+  "Lamphun": { 
+    color: "#16a34a", 
+    plots: [
+      { name: "Ban Hong, Nong Pla Sa Wai", area: "21-0-23 ไร่", size: "33,692 ตร.ม.", buy: "2970707", sell: "4562502", lat: 18.328018, lng: 98.695039, gmaps: "https://maps.app.goo.gl/XZv7WJWYM8TPked48" },
+      { name: "Lamphun 260 Rai", area: "260-1-11.9 ไร่", size: "416,447.6 ตร.ม.", buy: "520559500", sell: "763217060", lat: 18.606792, lng: 99.041754, gmaps: "https://maps.app.goo.gl/q1JgKwYDTBMmKdBZ6" },
+      { name: "Lamphun 313 Rai", area: "313-1-96.7 ไร่", size: "501,586.8 ตร.ม.", buy: "332331250", sell: "N/A", lat: 18.601499, lng: 99.035617, gmaps: "https://maps.app.goo.gl/wQ5692jcYEwy4NG17" }
+    ]
+  },
+  "Lampang": { 
+    color: "#9333ea", 
+    plots: [
+      { name: "Huay Weang, Lampang", area: "77-1-88.8 ไร่", size: "123,955.2 ตร.ม.", buy: "54000000", sell: "84168576", lat: 18.266491, lng: 99.531288, gmaps: "https://maps.app.goo.gl/EZvZ3aeKvK2FNcgc6" }
+    ]
+  },
+  "Prachuap Khiri Khan": { 
+    color: "#ea580c", 
+    plots: [
+      { name: "Huay Sai, Prachuap", area: "22-1-1 ไร่", size: "35,604 ตร.ม.", buy: "18000000", sell: "27858795", lat: 11.681137, lng: 99.692182, gmaps: "https://maps.app.goo.gl/trz6xMHXrg1wjdhY7" },
+      { name: "Bor Nok, Prachuap", area: "77-3-87.2 ไร่", size: "124,748.8 ตร.ม.", buy: "40000000", sell: "61908434", lat: 11.970244, lng: 99.827663, gmaps: "https://maps.app.goo.gl/G8Uj8bA6YBVgFNbCA" }
+    ]
+  },
+  "Ayutthaya": { 
+    color: "#0891b2", 
+    plots: [
+      { name: "Hitech Industrial Estate", area: "51-1-40.3 ไร่", size: "82,161.2 ตร.ม.", buy: "136841478", sell: "211759776", lat: 14.251563, lng: 100.594737, gmaps: "https://maps.app.goo.gl/BomTx7UbgNjCxNN58" }
+    ]
+  }
+};
+
+// 5. สร้างรายการใน Sidebar ด้านซ้าย
+const sidebar = document.getElementById('sidebar');
+Object.entries(regions).forEach(([region, data]) => {
+  const header = document.createElement('div');
+  header.className = 'region-header';
+  header.style.background = data.color;
+  header.textContent = `📍 ${region} (${data.plots.length} แปลง)`;
+  sidebar.appendChild(header);
+  
+  data.plots.forEach(plot => {
+    const item = document.createElement('div');
+    item.className = 'plot-item';
+    item.innerHTML = `
+      <div class="plot-name">${plot.name}</div>
+      <div class="plot-meta">พื้นที่: ${plot.area} · ${plot.size}</div>
+      <div class="plot-price">ราคาซื้อ: ฿${Number(plot.buy).toLocaleString()}</div>
+    `;
+    
+    // ตั้งค่าว่าถ้าคลิกที่รายการใน Sidebar ให้เลื่อนแผนที่ไปที่จุดนั้น
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.plot-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      map.setView([plot.lat, plot.lng], 15);
+      plot._marker.openPopup();
+    });
+    
+    plot._item = item;
+    sidebar.appendChild(item);
+  });
+});
+
+// 6. ตั้งค่าเริ่มต้นของแผนที่ และดึง Tile layer จาก OpenStreetMap
+const map = L.map('map').setView([15.5, 100.5], 6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', 
+  maxZoom: 19
+}).addTo(map);
+
+// 7. วนลูปสร้างจุดปักหมุด (Marker) ลงบนแผนที่
+Object.entries(regions).forEach(([region, data]) => {
+  data.plots.forEach(plot => {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:14px;height:14px;background:${data.color};border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5)"></div>`,
+      iconSize: [14,14], 
+      iconAnchor: [7,7]
+    });
+    
+    const sell = plot.sell === 'N/A' ? 'N/A' : '฿' + Number(plot.sell).toLocaleString();
+    
+    const marker = L.marker([plot.lat, plot.lng], { icon }).addTo(map)
+      .bindPopup(`
+        <div class="popup-title">${plot.name}</div>
+        <div class="popup-row">📍 ${region}</div>
+        <div class="popup-row">พื้นที่: ${plot.area} (${plot.size})</div>
+        <div class="popup-row">ราคาซื้อ: ฿${Number(plot.buy).toLocaleString()}</div>
+        <div class="popup-row">ราคาขาย: ${sell}</div>
+        <a class="popup-link" href="${plot.gmaps}" target="_blank">🔗 เปิดใน Google Maps</a>
+      `, { maxWidth: 240 });
+      
+    plot._marker = marker;
+    
+    // ตั้งค่าว่าถ้าคลิกที่หมุดบนแผนที่ ให้ไฮไลท์รายการใน Sidebar ด้วย
+    marker.on('click', () => {
+      document.querySelectorAll('.plot-item').forEach(i => i.classList.remove('active'));
+      if (plot._item) { 
+        plot._item.classList.add('active'); 
+        plot._item.scrollIntoView({ behavior:'smooth', block:'nearest' }); 
+      }
+    });
+  });
+});
+
+// 8. สร้างคำอธิบายสัญลักษณ์ (Legend) ที่มุมขวาล่าง
+const legend = L.control({ position: 'bottomright' });
+legend.onAdd = () => {
+  const div = L.DomUtil.create('div', 'legend');
+  div.innerHTML = '<strong style="font-size:12px">จังหวัด</strong><br>';
+  Object.entries(regions).forEach(([r, d]) => {
+    div.innerHTML += `<span class="legend-dot" style="background:${d.color}"></span>${r}<br>`;
+  });
+  return div;
+};
+legend.addTo(map);
+</script>
+
+</body>
+</html>
